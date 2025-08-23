@@ -201,7 +201,8 @@ void BuildFeatures(const string sym, int tf_index, double fvg_size, double sprea
    double time_bucket = 0.0;
    // time bucket: NY session roughly 13:00-21:00 server time approx; simplify: use hour
    datetime curr = TimeCurrent();
-   int hr = TimeHour(curr);
+   MqlDateTime dt; TimeToStruct(curr, dt);
+   int hr = dt.hour;
    if(hr>=13 && hr<=21) time_bucket = 1.0; else time_bucket = 0.0;
    double vol_norm = SafeNorm(recent_vol, 1000.0);
 
