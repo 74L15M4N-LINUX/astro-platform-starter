@@ -254,7 +254,8 @@ void EvaluateSymbol(const string sym)
    MqlRates r15[]; if(!GetRates(sym, PERIOD_M15, 800, r15)) return;
 
    // Find FVGs (M1 first, then M5, then M15)
-   string types[200]; double lows[200]; double highs[200]; double mids[200];
+   // allow up to 600 combined entries (3 TF x 200)
+   string types[600]; double lows[600]; double highs[600]; double mids[600];
    int f1 = FindFVGs(r1, ArraySize(r1), types, lows, highs, mids);
    int f5 = FindFVGs(r5, ArraySize(r5), types, lows, highs, mids);
    int f15 = FindFVGs(r15, ArraySize(r15), types, lows, highs, mids);
