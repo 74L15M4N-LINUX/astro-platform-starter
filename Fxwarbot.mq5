@@ -36,7 +36,7 @@ input int    InpSimLookaheadBars  = 300;                  // bars to scan-forwar
 //======================== Types/Globals ========================//
 #define FEATURE_COUNT 6
 
-typedef struct Sample
+struct Sample
 {
    double features[FEATURE_COUNT];
 };
