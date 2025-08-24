@@ -32,6 +32,7 @@ input double InpModelThreshold    = 0.55;                 // threshold to accept
 input int    InpModelMinSamples   = 8;                    // min samples before vetoing
 input string InpModelFile         = "fvg_model.dat";    // file in MQL5/Files
 input int    InpSimLookaheadBars  = 300;                  // bars to scan-forward to decide win/lose
+input int    InpMaxTradeMinutes   = 240;                  // max duration before force close (0=disabled)
 
 //======================== Types/Globals ========================//
 #define FEATURE_COUNT 6
@@ -165,6 +166,38 @@ void ManageOpenTrades()
       {
          if(trade.PositionClose(ticket))
             PrintFormat("[EXIT] Closed ticket %I64d on trend flip", ticket);
+      }
+
+      // ---- Rule 2: time-stop -----------------------------------------
+      if(InpMaxTradeMinutes>0)
+      {
+         datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
+         if((TimeCurrent() - openTime)/60 >= InpMaxTradeMinutes)
+         {
+            if(trade.PositionClose(ticket))
+               PrintFormat("[EXIT] Closed ticket %I64d after %d minutes", ticket, InpMaxTradeMinutes);
+            continue;
+         }
+      }
+
+      // ---- Rule 3: opposite gap currently active ---------------------
+      MqlRates recent[120]; int bars=CopyRates(sym,PERIOD_M1,0,120,recent);
+      if(bars>50)
+      {
+         string tOpp[200]; double lOpp[200], hOpp[200], mOpp[200];
+         int fOpp = FindFVGs(recent, bars, tOpp, lOpp, hOpp, mOpp);
+         for(int g=0; g<fOpp; g++)
+         {
+            bool opposite = (type==POSITION_TYPE_BUY && (tOpp[g]=="bear_fvg"||tOpp[g]=="bear_ifvg")) ||
+                            (type==POSITION_TYPE_SELL&& (tOpp[g]=="bull_fvg"||tOpp[g]=="bull_ifvg"));
+            double price=SymbolInfoDouble(sym,(type==POSITION_TYPE_BUY)?SYMBOL_BID:SYMBOL_ASK);
+            if(opposite && price>=lOpp[g] && price<=hOpp[g])
+            {
+               if(trade.PositionClose(ticket))
+                  PrintFormat("[EXIT] Closed ticket %I64d due to opposite gap", ticket);
+               break;
+            }
+         }
       }
    }
 }
