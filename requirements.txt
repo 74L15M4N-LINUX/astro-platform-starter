@@ -1,0 +1,34 @@
+# Core AI and NLP
+openai==1.3.0
+langchain==0.0.350
+langchain-openai==0.0.2
+
+# Speech Recognition and Text-to-Speech
+SpeechRecognition==3.10.0
+pyttsx3==2.90
+pyaudio==0.2.11
+
+# System Control and Automation
+pyautogui==0.9.54
+psutil==5.9.6
+subprocess.run
+
+# Web Automation
+selenium==4.15.2
+requests==2.31.0
+beautifulsoup4==4.12.2
+
+# File and System Operations
+pathlib
+os
+shutil
+glob
+
+# GUI and Interface
+tkinter
+customtkinter==5.2.0
+
+# Utilities
+python-dotenv==1.0.0
+click==8.1.7
+rich==13.7.0
