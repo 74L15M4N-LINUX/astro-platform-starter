@@ -149,24 +149,47 @@ int FindFVGs(const MqlRates &rates[], int size, string &types[], double &lows[],
 {
    int found=0;
    for(int i=2;i<size;i++){
-      // bullish
-      if(rates[i+0].high < rates[i-2].low){} // placeholder to avoid out-of-range in some builds
+      // -------- standard bullish FVG --------
       if(rates[i-2].high < rates[i].low){
-         types[found] = "bull";
-         lows[found] = rates[i-2].high;
+         types[found] = "bull_fvg";
+         lows[found]  = rates[i-2].high;
          highs[found] = rates[i].low;
-         mids[found] = (lows[found]+highs[found])/2.0;
+         mids[found]  = (lows[found]+highs[found])/2.0;
          found++;
       }
-      // bearish
+      // -------- standard bearish FVG --------
       if(rates[i-2].low > rates[i].high){
-         types[found] = "bear";
-         lows[found] = rates[i].high;
+         types[found] = "bear_fvg";
+         lows[found]  = rates[i].high;
          highs[found] = rates[i-2].low;
-         mids[found] = (lows[found]+highs[found])/2.0;
+         mids[found]  = (lows[found]+highs[found])/2.0;
          found++;
       }
-      if(found>=100) break;
+      // -------- inverse bullish FVG (mitigation gap) --------
+      if(rates[i-2].low < rates[i].high && rates[i-1].close < rates[i-2].low){
+         double gLow  = rates[i-1].high;
+         double gHigh = rates[i-2].low;
+         if(gHigh>gLow){
+            types[found] = "bull_ifvg";
+            lows[found]  = gLow;
+            highs[found] = gHigh;
+            mids[found]  = (gLow+gHigh)/2.0;
+            found++;
+         }
+      }
+      // -------- inverse bearish FVG --------
+      if(rates[i-2].high > rates[i].low && rates[i-1].close > rates[i-2].high){
+         double gHigh = rates[i-1].low;
+         double gLow  = rates[i-2].high;
+         if(gHigh<gLow){
+            types[found] = "bear_ifvg";
+            lows[found]  = gHigh;
+            highs[found] = gLow;
+            mids[found]  = (gHigh+gLow)/2.0;
+            found++;
+         }
+      }
+      if(found>=600) break; // enlarged cap to match array size
    }
    return(found);
 }
@@ -270,7 +293,7 @@ void EvaluateSymbol(const string sym)
       double p = ModelPredict(features);
       bool allow = (!InpModelEnabled) || (g_samples_count < InpModelMinSamples) || (p>=InpModelThreshold);
       double sl, tptarget;
-      if(tppe=="bull"){
+      if(tppe=="bull_fvg"){
          sl = low - InpBufferPoints*pt;
          double risk = mid - sl; if(risk<=0) continue;
          tptarget = mid + InpRR * risk;
@@ -283,8 +306,32 @@ void EvaluateSymbol(const string sym)
          if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
          return;
       }
-      else{
+      else if(tppe=="bear_fvg"){
          sl = high + InpBufferPoints*pt;
+         double risk = sl - mid; if(risk<=0) continue;
+         tptarget = mid - InpRR * risk;
+         if(allow){
+            if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_SELL, sl, tptarget); }
+            else PrintFormat("[SIGNAL SELL %s] p=%.3f allow=%d sl=%.5f tp=%.5f", sym, p, (int)allow, sl, tptarget);
+         }
+         int outcome = SimulateOutcome(r1, ArraySize(r1), mid, sl, tptarget, InpSimLookaheadBars);
+         if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
+         return;
+      }
+      else if(tppe=="bull_ifvg"){
+         sl = lows[i] - InpBufferPoints*pt;
+         double risk = mid - sl; if(risk<=0) continue;
+         tptarget = mid + InpRR * risk;
+         if(allow){
+            if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_BUY, sl, tptarget); }
+            else PrintFormat("[SIGNAL BUY %s] p=%.3f allow=%d sl=%.5f tp=%.5f", sym, p, (int)allow, sl, tptarget);
+         }
+         int outcome = SimulateOutcome(r1, ArraySize(r1), mid, sl, tptarget, InpSimLookaheadBars);
+         if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
+         return;
+      }
+      else if(tppe=="bear_ifvg"){
+         sl = highs[i] + InpBufferPoints*pt;
          double risk = sl - mid; if(risk<=0) continue;
          tptarget = mid - InpRR * risk;
          if(allow){
@@ -305,7 +352,7 @@ void EvaluateSymbol(const string sym)
       double p = ModelPredict(features);
       bool allow = (!InpModelEnabled) || (g_samples_count < InpModelMinSamples) || (p>=InpModelThreshold);
       double sl, tptarget;
-      if(tppe=="bull"){
+      if(tppe=="bull_fvg"){
          sl = low - InpBufferPoints*pt;
          double risk = mid - sl; if(risk<=0) continue;
          tptarget = mid + InpRR * risk;
@@ -313,8 +360,26 @@ void EvaluateSymbol(const string sym)
          int outcome = SimulateOutcome(r5, ArraySize(r5), mid, sl, tptarget, InpSimLookaheadBars);
          if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
          return;
-      } else {
+      } else if(tppe=="bear_fvg"){
          sl = high + InpBufferPoints*pt;
+         double risk = sl - mid; if(risk<=0) continue;
+         tptarget = mid - InpRR * risk;
+         if(allow){ if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_SELL, sl, tptarget); } else PrintFormat("[SIGNAL SELL %s] p=%.3f allow=%d", sym, p, (int)allow); }
+         int outcome = SimulateOutcome(r5, ArraySize(r5), mid, sl, tptarget, InpSimLookaheadBars);
+         if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
+         return;
+      }
+      else if(tppe=="bull_ifvg"){
+         sl = lows[idx] - InpBufferPoints*pt;
+         double risk = mid - sl; if(risk<=0) continue;
+         tptarget = mid + InpRR * risk;
+         if(allow){ if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_BUY, sl, tptarget); } else PrintFormat("[SIGNAL BUY %s] p=%.3f allow=%d", sym, p, (int)allow); }
+         int outcome = SimulateOutcome(r5, ArraySize(r5), mid, sl, tptarget, InpSimLookaheadBars);
+         if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
+         return;
+      }
+      else if(tppe=="bear_ifvg"){
+         sl = highs[idx] + InpBufferPoints*pt;
          double risk = sl - mid; if(risk<=0) continue;
          tptarget = mid - InpRR * risk;
          if(allow){ if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_SELL, sl, tptarget); } else PrintFormat("[SIGNAL SELL %s] p=%.3f allow=%d", sym, p, (int)allow); }
@@ -332,7 +397,7 @@ void EvaluateSymbol(const string sym)
       double p = ModelPredict(features);
       bool allow = (!InpModelEnabled) || (g_samples_count < InpModelMinSamples) || (p>=InpModelThreshold);
       double sl, tptarget;
-      if(tppe=="bull"){
+      if(tppe=="bull_fvg"){
          sl = low - InpBufferPoints*pt;
          double risk = mid - sl; if(risk<=0) continue;
          tptarget = mid + InpRR * risk;
@@ -340,8 +405,26 @@ void EvaluateSymbol(const string sym)
          int outcome = SimulateOutcome(r15, ArraySize(r15), mid, sl, tptarget, InpSimLookaheadBars);
          if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
          return;
-      } else {
+      } else if(tppe=="bear_fvg"){
          sl = high + InpBufferPoints*pt;
+         double risk = sl - mid; if(risk<=0) continue;
+         tptarget = mid - InpRR * risk;
+         if(allow){ if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_SELL, sl, tptarget); } else PrintFormat("[SIGNAL SELL %s] p=%.3f allow=%d", sym, p, (int)allow); }
+         int outcome = SimulateOutcome(r15, ArraySize(r15), mid, sl, tptarget, InpSimLookaheadBars);
+         if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
+         return;
+      }
+      else if(tppe=="bull_ifvg"){
+         sl = lows[idx] - InpBufferPoints*pt;
+         double risk = mid - sl; if(risk<=0) continue;
+         tptarget = mid + InpRR * risk;
+         if(allow){ if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_BUY, sl, tptarget); } else PrintFormat("[SIGNAL BUY %s] p=%.3f allow=%d", sym, p, (int)allow); }
+         int outcome = SimulateOutcome(r15, ArraySize(r15), mid, sl, tptarget, InpSimLookaheadBars);
+         if(InpModelLearn){ ModelUpdate(features, outcome); SaveModel(); }
+         return;
+      }
+      else if(tppe=="bear_ifvg"){
+         sl = highs[idx] + InpBufferPoints*pt;
          double risk = sl - mid; if(risk<=0) continue;
          tptarget = mid - InpRR * risk;
          if(allow){ if(InpEnableTrading){ PlaceMarket(sym, ORDER_TYPE_SELL, sl, tptarget); } else PrintFormat("[SIGNAL SELL %s] p=%.3f allow=%d", sym, p, (int)allow); }
