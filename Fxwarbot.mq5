@@ -135,6 +135,40 @@ double SafeNorm(double v, double base)
    return(v/base);
 }
 
+//======================== Position management ===================//
+// Closes EA positions when M15 trend flips against them
+void ManageOpenTrades()
+{
+   for(int i=PositionsTotal()-1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket))
+         continue;
+
+      if((int)PositionGetInteger(POSITION_MAGIC) != 20250823)
+         continue; // not ours
+
+      string sym = PositionGetString(POSITION_SYMBOL);
+      int    type = (int)PositionGetInteger(POSITION_TYPE); // 0=buy,1=sell
+
+      // determine current M15 trend (same SMA logic as entry)
+      MqlRates m15[60];
+      if(CopyRates(sym, PERIOD_M15, 0, 60, m15) <= 0)
+         continue;
+      double sma=0.0; int N = InpSMA_M15; if(N<=0) N=50;
+      for(int k=0; k<N && k<ArraySize(m15); k++) sma += m15[k].close;
+      sma /= MathMax(1,N);
+      bool trendUp = (m15[0].close > sma);
+
+      // if long but trend down OR short but trend up -> exit
+      if((type==POSITION_TYPE_BUY && !trendUp) || (type==POSITION_TYPE_SELL && trendUp))
+      {
+         if(trade.PositionClose(ticket))
+            PrintFormat("[EXIT] Closed ticket %I64d on trend flip", ticket);
+      }
+   }
+}
+
 //======================== FVG detection ========================//
 // CopyRates wrapper
 bool GetRates(const string sym, ENUM_TIMEFRAMES tf, int bars, MqlRates &rates[])
@@ -485,6 +519,7 @@ void OnTick()
       if(StringLen(s)==0) continue;
       EvaluateSymbol(s);
    }
+   ManageOpenTrades(); // Call ManageOpenTrades on every tick
 }
 
 //+------------------------------------------------------------------+
